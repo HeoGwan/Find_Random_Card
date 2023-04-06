@@ -25,6 +25,8 @@ public struct SaveData
 public class DatabaseManager : MonoBehaviour
 {
     private string[]                            _databaseTypes = { "easy", "normal", "hard" };
+    private string[]                            _orderDatabaseTypes = { "easy_order", "normal_order", "hard_order" };
+
     private string                              _databaseType;
 
     private Transform                           _showScores;
@@ -87,15 +89,15 @@ public class DatabaseManager : MonoBehaviour
 //        });
 //    }
     
-    public void GetDatas(string dataType = "")
+    public void GetDatas(bool isRanking = true)
     {
-        string databaseType;
+        //string databaseType;
 
-        if (dataType != "") databaseType = dataType;
-        else databaseType = _databaseType;
+        //if (dataType != "") databaseType = dataType;
+        //else databaseType = _databaseType;
 
         // 데이터를 가져오는 코드
-        _db.Child(databaseType).OrderByChild("elapsed_time").GetValueAsync().ContinueWith(task =>
+        _db.Child(_databaseType).OrderByChild("elapsed_time").GetValueAsync().ContinueWith(task =>
         {
             if (task.IsFaulted)
             {
@@ -125,7 +127,7 @@ public class DatabaseManager : MonoBehaviour
                 _scores.Enqueue(new SaveData(nickname, string.Format("{0:0.000}", float.Parse(elapsedTime))));
             }
 
-            _showScores = dataType == "" ? _gameOverScores : _rankingScores;
+            _showScores = isRanking == true ? _rankingScores : _gameOverScores;
             _isShowScore = true;
         });
     }
@@ -176,9 +178,15 @@ public class DatabaseManager : MonoBehaviour
     }
 
 
-    public void SetDatabase(DIFFICULTY difficulty)
+    public void SetDatabase(GAME_TYPE gameType, DIFFICULTY difficulty)
     {
-        _databaseType = _databaseTypes[(int)difficulty - 3];
+        int type = (int)difficulty - 3;
+        _databaseType = gameType == GAME_TYPE.RANDOM ? _databaseTypes[type] : _orderDatabaseTypes[type];
+    }
+
+    public void SetDatabase(GAME_TYPE gameType, string databaseType)
+    {
+        _databaseType = gameType == GAME_TYPE.RANDOM ? databaseType : databaseType + "_order";
     }
 
     public void GoMain()

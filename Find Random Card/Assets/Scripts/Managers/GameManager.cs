@@ -15,6 +15,168 @@ using UnityEngine.SceneManagement;
 using UnityEngine.UI;
 using Random = UnityEngine.Random;
 
+// Grid Size에 따라 DIFFICULTY가 달라짐
+public enum DIFFICULTY
+{
+    EASY = 3,
+    NORMAL = 4,
+    HARD = 5,
+}
+
+public enum GAME_TYPE
+{
+    RANDOM,
+    ORDER,
+}
+
+// 게임 모드 클래스
+public abstract class GameMode
+{
+    protected GameManager gameManager;
+
+    protected GameMode()
+    {
+        gameManager = GameManager._instance;
+    }
+
+    public abstract void ShuffleCards();
+    public abstract void BringCards();
+    public abstract void ChangeNumber();
+}
+
+public class RandomMode : GameMode
+{
+    public RandomMode() : base() { }
+
+    public override void ShuffleCards()
+    {
+        if (gameManager.CardObj.childCount != 0) gameManager.ReturnCards();
+
+        // 랜덤 섞기
+        int random1, random2;
+        CardInfo temp;
+
+        for (int index = 0; index < gameManager.Cards.Count; ++index)
+        {
+            random1 = Random.Range(0, gameManager.Cards.Count);
+            random2 = Random.Range(0, gameManager.Cards.Count);
+
+            temp = gameManager.Cards[random1];
+            gameManager.Cards[random1] = gameManager.Cards[random2];
+            gameManager.Cards[random2] = temp;
+        }
+    }
+
+    public override void BringCards()
+    {
+        // 무작위로 섞인 카드 숫자 중 pow(n, 2)개 만큼 가져오기
+        gameManager.NewCards = gameManager.Cards.GetRange(0, gameManager.CardCount);
+
+        for (int index = 0; index < gameManager.NewCards.Count; ++index)
+        {
+            // 카드 오브젝트 가져오기
+            gameManager._objectManager.GetChild(0).SetParent(gameManager.CardObj);
+
+            // 가져온 카드 오브젝트의 숫자 설정
+            Card cardScript = gameManager.CardObj.GetChild(index).GetComponent<Card>();
+
+            cardScript.SetCardInfo(gameManager.NewCards[index], gameManager.FlipCardSize);
+
+            cardScript.SetCardNumberSize(gameManager.GridSize);
+            gameManager.CurCards.Add(cardScript);
+        }
+    }
+
+    public override void ChangeNumber()
+    {
+        gameManager.NewCards.Remove(gameManager.FindCard);
+
+        // 게임 클리어
+        if (gameManager.NewCards.Count <= 0)
+        {
+            // 만약 새 카드가 없으면 게임을 종료한다.
+            gameManager.GameClear();
+            return;
+        }
+
+        int findNumberIndex = Random.Range(0, gameManager.NewCards.Count);
+        gameManager.FindCard = gameManager.NewCards[findNumberIndex];
+        gameManager.ShowFindCardNumber.text = gameManager.FindCard.Number.ToString();
+    }
+}
+
+public class OrderMode : GameMode
+{
+    private Queue<CardInfo> _findCardQueue = new Queue<CardInfo>();
+
+    public OrderMode() : base() { }
+
+    public override void ShuffleCards()
+    {
+        if (gameManager.CardObj.childCount != 0) gameManager.ReturnCards();
+
+        gameManager.OrderCards = new List<CardInfo>(new CardInfo[gameManager.CardCount]);
+
+        for (int index = 0; index < gameManager.OrderCards.Count; ++index)
+        {
+            CardInfo card = new CardInfo();
+            card.Number = index + 1;
+
+            gameManager.OrderCards[index] = card;
+            _findCardQueue.Enqueue(card);
+        }
+
+        // 랜덤 섞기
+        int random1, random2;
+        CardInfo temp;
+
+        for (int index = 0; index < gameManager.OrderCards.Count; ++index)
+        {
+            random1 = Random.Range(0, gameManager.OrderCards.Count);
+            random2 = Random.Range(0, gameManager.OrderCards.Count);
+
+            temp = gameManager.OrderCards[random1];
+            gameManager.OrderCards[random1] = gameManager.OrderCards[random2];
+            gameManager.OrderCards[random2] = temp;
+        }
+    }
+
+    public override void BringCards()
+    {
+        // 무작위로 섞인 카드 숫자 중 pow(n, 2)개 만큼 가져오기
+        for (int index = 0; index < gameManager.OrderCards.Count; ++index)
+        {
+            // 카드 오브젝트 가져오기
+            gameManager._objectManager.GetChild(0).SetParent(gameManager.CardObj);
+
+            // 가져온 카드 오브젝트의 숫자 설정
+            Card cardScript = gameManager.CardObj.GetChild(index).GetComponent<Card>();
+
+            cardScript.SetCardInfo(gameManager.OrderCards[index], gameManager.FlipCardSize);
+
+            cardScript.SetCardNumberSize(gameManager.GridSize);
+            gameManager.CurCards.Add(cardScript);
+        }
+    }
+
+    public override void ChangeNumber()
+    {
+        gameManager.OrderCards.Remove(gameManager.FindCard);
+
+        // 게임 클리어
+        if (gameManager.OrderCards.Count <= 0)
+        {
+            // 만약 새 카드가 없으면 게임을 종료한다.
+            gameManager.GameClear();
+            return;
+        }
+
+        gameManager.FindCard = _findCardQueue.Dequeue();
+        gameManager.ShowFindCardNumber.text = gameManager.FindCard.Number.ToString();
+    }
+}
+
+
 /*
  * 게임의 난이도는 Easy, Normal, Hard로 나뉜다
  * Easy, Normal, Hard 순으로 3x3, 4x4, 5x5로 카드의 수가 나뉘게 되고
@@ -29,14 +191,6 @@ using Random = UnityEngine.Random;
  * 
  * 더 추가하고 싶다면 점수로 코인을 모아 뒷면 스킨을 살 수 있도록 한다.
 */
-
-// Grid Size에 따라 DIFFICULTY가 달라짐
-public enum DIFFICULTY
-{
-    EASY = 3,
-    NORMAL = 4,
-    HARD = 5,
-}
 
 /*
  * TODO
@@ -58,8 +212,19 @@ public class GameManager : MonoBehaviour
     private string[]                            _difficultyTypes = { "쉬움", "보통", "어려움" };
     private float[]                             _difficultyTimes = { 60f, 75f, 90f };
 
+    // 랭킹 관련 변수
+    private GAME_TYPE                           _rankingGameType = GAME_TYPE.RANDOM;
+    private string                              _rankingDifficulty = "easy";
+    private Color                               _normalColor = new Color(1, 1, 1);
+    private Color                               _selectColor = new Color(160 / 255, 160 / 255, 160 / 255);
+
     // 게임 관련 변수
     // 게임 
+    [SerializeField] private int                _gameModeCount;
+    private GAME_TYPE                           _gameType;
+    private GameMode                            _gameMode;
+    private GameMode[]                          _gameModes;
+
     [Header("▼ Variables")]
     [SerializeField] private float              _maxGameTime = 60f;
     private float                               _gameTime;
@@ -87,12 +252,30 @@ public class GameManager : MonoBehaviour
 
     // Getter, Setter
     public DIFFICULTY                           Difficulty { get { return _difficulty; } }
+    public GAME_TYPE                            GameType { get { return _gameType; } }
     public bool                                 IsFever { get { return _isFever; } }
     public float                                GameTime { get { return _gameTime; } }
+    public int                                  GridSize { get { return _gridSize; } set { _gridSize = value; } }
+    public int                                  CardCount { get { return _cardCount; } }
+    public float                                FlipCardSize { get { return _flipCardSize; } }
+
+    // 게임 모드 관련 Getter, Setter
+    public Transform                            CardObj { get { return _cardObj; } }
+    public CardInfo                             FindCard { get { return _findCard; } set { _findCard = value; } }
+    public List<Card>                           CurCards { get { return _curCards; } }
+    public TextMeshProUGUI                      ShowFindCardNumber { get { return _showFindCardNumber; } }
+
+    // 무작위 카드 맞추기 모드
+    public List<CardInfo>                       Cards { get { return _cards; } set { _cards = value; } }
+    public List<CardInfo>                       NewCards { get { return _newCards; } set { _newCards = value; } }
+
+    // 순서대로 카드 맞추기 모드
+    public List<CardInfo>                       OrderCards { get { return _orderCards; } set { _orderCards = value; } }
 
 
     // 카드 관련 변수
-    [SerializeField] private int                _maxCardTypeCount;
+    // 무작위 카드 맞추기 모드
+    [SerializeField] private int                _maxRandomCardCount;
     private List<CardInfo>                      _cards;
     private List<CardInfo>                      _newCards;
 
@@ -101,7 +284,12 @@ public class GameManager : MonoBehaviour
 
     private GridLayoutGroup                     _cardLayoutGroup;
     private int                                 _gridSize;
+    private int                                 _cardCount;
     private float                               _flipCardSize;
+
+    // 순서대로 카드 맞추기 모드
+    private List<CardInfo>                      _orderCards;
+
 
     // Show In Inspector
     [Header("▼ Objects")]
@@ -110,6 +298,9 @@ public class GameManager : MonoBehaviour
     [SerializeField] private Image              _showTimeImage;
     [SerializeField] private Image              _showComboGauge;
     [SerializeField] private TMP_InputField     _nickname;
+    [Header("▼ Ranking Buttons")]
+    [SerializeField] private Toggle[]             _rankingModeButtons;
+    [SerializeField] private Toggle[]             _rankingDifficultyButtons;
 
     [Space(10)]
     [Header("▼ Text Objects")]
@@ -147,7 +338,10 @@ public class GameManager : MonoBehaviour
 
         _path = Path.Combine(Application.persistentDataPath , "setting.json");
 
-        _cards = new List<CardInfo>(new CardInfo[_maxCardTypeCount]);
+        InitMode();
+        SelectMode(GAME_TYPE.RANDOM);
+
+        _cards = new List<CardInfo>(new CardInfo[_maxRandomCardCount]);
 
         int number = 1;
 
@@ -165,6 +359,8 @@ public class GameManager : MonoBehaviour
 
         _comboPart = 1.0f / _maxComboStack;
         _comboStackPoint = _comboPart * _comboStack;
+
+        _databaseManager.SetDatabase(_rankingGameType, _rankingDifficulty);
     }
 
     private void Start()
@@ -310,6 +506,20 @@ public class GameManager : MonoBehaviour
         File.WriteAllText(_path, json);
     }
 
+    void InitMode()
+    {
+        _gameModes = new GameMode[_gameModeCount];
+
+        _gameModes[0] = new RandomMode();
+        _gameModes[1] = new OrderMode();
+    }
+
+    void SelectMode(GAME_TYPE gameType)
+    {
+        _gameType = gameType;
+        _gameMode = _gameModes[(int)gameType];
+    }
+
     void StartFever()
     {
         _isFever = true;
@@ -321,55 +531,44 @@ public class GameManager : MonoBehaviour
         }
     }
 
-    void ReturnCards()
-    {
-        // 카드 반납
-        int cardObjChild = _cardObj.childCount;
+    //void ShuffleCards()
+    //{
+    //    if (_cardObj.childCount != 0) ReturnCards();
 
-        for (int index = 0; index < cardObjChild; ++index)
-        {
-            _cardObj.GetChild(0).SetParent(_objectManager);
-        }
-    }
+    //    // 랜덤 섞기
+    //    int random1, random2;
+    //    CardInfo temp;
 
-    void ShuffleCards()
-    {
-        if (_cardObj.childCount != 0) ReturnCards();
+    //    for (int index = 0; index < _cards.Count; ++index)
+    //    {
+    //        random1 = Random.Range(0, _cards.Count);
+    //        random2 = Random.Range(0, _cards.Count);
 
-        // 랜덤 섞기
-        int random1, random2;
-        CardInfo temp;
+    //        temp = _cards[random1];
+    //        _cards[random1] = _cards[random2];
+    //        _cards[random2] = temp;
+    //    }
+    //}
 
-        for (int index = 0; index < _cards.Count; ++index)
-        {
-            random1 = Random.Range(0, _cards.Count);
-            random2 = Random.Range(0, _cards.Count);
+    //void BringCards()
+    //{
+    //    // 무작위로 섞인 카드 숫자 중 pow(n, 2)개 만큼 가져오기
+    //    _newCards = _cards.GetRange(0, (int)Mathf.Pow(_gridSize, 2));
 
-            temp = _cards[random1];
-            _cards[random1] = _cards[random2];
-            _cards[random2] = temp;
-        }
-    }
+    //    for (int index = 0; index < _newCards.Count; ++index)
+    //    {
+    //        // 카드 오브젝트 가져오기
+    //        _objectManager.GetChild(0).SetParent(_cardObj);
 
-    void BringCards()
-    {
-        // 무작위로 섞인 카드 숫자 중 pow(n, 2)개 만큼 가져오기
-        _newCards = _cards.GetRange(0, (int)Mathf.Pow(_gridSize, 2));
+    //        // 가져온 카드 오브젝트의 숫자 설정
+    //        Card cardScript = _cardObj.GetChild(index).GetComponent<Card>();
 
-        for (int index = 0; index < _newCards.Count; ++index)
-        {
-            // 카드 오브젝트 가져오기
-            _objectManager.GetChild(0).SetParent(_cardObj);
+    //        cardScript.SetCardInfo(_newCards[index], _flipCardSize);
 
-            _newCards[index].PreviewTime = _maxPreviewTime;
-
-            // 가져온 카드 오브젝트의 숫자 설정
-            Card cardScript = _cardObj.GetChild(index).GetComponent<Card>();
-            cardScript.SetCardInfo(_newCards[index], _flipCardSize);
-            cardScript.SetCardNumberSize(_gridSize);
-            _curCards.Add(cardScript);
-        }
-    }
+    //        cardScript.SetCardNumberSize(_gridSize);
+    //        _curCards.Add(cardScript);
+    //    }
+    //}
 
     void ShowPreview()
     {
@@ -383,6 +582,8 @@ public class GameManager : MonoBehaviour
 
     void StackCombo(bool isCombo)
     {
+        if (_gameType == GAME_TYPE.ORDER) return;
+
         _comboStackPoint = _comboPart * _comboStack;
         if (!isCombo)
         {
@@ -465,6 +666,17 @@ public class GameManager : MonoBehaviour
 
 
     // public 함수
+    public void ReturnCards()
+    {
+        // 카드 반납
+        int cardObjChild = _cardObj.childCount;
+
+        for (int index = 0; index < cardObjChild; ++index)
+        {
+            _cardObj.GetChild(0).SetParent(_objectManager);
+        }
+    }
+
     public void PreviewOver()
     {
         if (!_isPreview) return; // 이미 종료된 상태이면 작동하지 않는다.
@@ -512,14 +724,21 @@ public class GameManager : MonoBehaviour
                 break;
         }
         _difficulty = (DIFFICULTY)gridSize;
+        
         _gridSize = gridSize;
+        _cardCount = (int)Mathf.Pow(GridSize, 2);
         _maxGameTime = _difficultyTimes[gridSize - 3];
         _maxFeverTime = _maxPreviewTime / 5;
+
         // 그리드 사이즈 조절
         _flipCardSize = cellSize * 0.8f;
         _cardLayoutGroup.cellSize = new Vector2(_flipCardSize, cellSize);
         _cardLayoutGroup.spacing = new Vector2(cellSpacing, cellSpacing);
-        _databaseManager.SetDatabase(_difficulty);
+        
+        // 데이터 가져오기
+        _databaseManager.SetDatabase(_gameType, _difficulty);
+        
+        // 난이도 보여주기
         _showGameoverDifficulty.text = "난이도: " + _difficultyTypes[(int)_difficulty - 3];
     }
 
@@ -536,16 +755,17 @@ public class GameManager : MonoBehaviour
 
         /* 카드 배치 시작 */
         /*
-         * 게임 시작 시 카드 종류가 저장되어 있는 리스트 중 25(pow(n))개를 골라 가져온다.
+            * 게임 시작 시 카드 종류가 저장되어 있는 리스트 중 25(pow(n))개를 골라 가져온다.
         */
+        // 게임 모드에 맞게 카드를 섞고 카드를 가져온다.
         // 카드 섞기
-        ShuffleCards();
+        _gameMode.ShuffleCards();
 
         // 카드 가져오기
-        BringCards();
+        _gameMode.BringCards();
 
         // 찾아야 하는 카드 뽑기
-        ChangeNumber();
+        _gameMode.ChangeNumber();
         /* 카드 배치 종료 */
 
         // 미리보기 화면 보여주기
@@ -563,7 +783,7 @@ public class GameManager : MonoBehaviour
         GameOver(true);
 
         // 데이터 가져오기
-        _databaseManager.GetDatas();
+        _databaseManager.GetDatas(false);
 
         // 게임 오버 화면으로
         _screenManager.GoScreen("GameOver");
@@ -600,31 +820,35 @@ public class GameManager : MonoBehaviour
         // 카드 반납
         ReturnCards();
 
+        if (_gameType == GAME_TYPE.ORDER)
+        {
+            _orderCards = null;
+        }
+
         // 화면 초기화 -> 게임 오버 화면으로
         if (!isClear) _screenManager.ScreenClear();
     }
 
-    public void ChangeNumber()
-    {
-        // 게임 클리어
-        if (_newCards.Count <= 0)
-        {
-            // 만약 새 카드가 없으면 게임을 종료한다.
-            GameClear();
-            return;
-        }
+    //public void ChangeNumber()
+    //{
+    //    // 게임 클리어
+    //    if (_newCards.Count <= 0)
+    //    {
+    //        // 만약 새 카드가 없으면 게임을 종료한다.
+    //        GameClear();
+    //        return;
+    //    }
 
-        int findNumberIndex = Random.Range(0, _newCards.Count);
-        _findCard = _newCards[findNumberIndex];
-        _showFindCardNumber.text = _findCard.Number.ToString();
-    }
+    //    int findNumberIndex = Random.Range(0, _newCards.Count);
+    //    _findCard = _newCards[findNumberIndex];
+    //    _showFindCardNumber.text = _findCard.Number.ToString();
+    //}
 
     public bool CheckNumber(CardInfo cardInfo)
     {
         if (cardInfo.Number == _findCard.Number)
         {
-            _newCards.Remove(_findCard);
-            ChangeNumber();
+            _gameMode.ChangeNumber();
             if (!_isFever) StackCombo(true);
             return true;
         }
@@ -703,12 +927,16 @@ public class GameManager : MonoBehaviour
         _nickname.text = "";
         _screenManager.PrevScreen();
 
-        _databaseManager.GetDatas();
+        _databaseManager.GetDatas(false);
     }
 
     public void ShowRanking()
     {
         _screenManager.GoScreen("Ranking");
+        _rankingModeButtons[0].Select();
+        _rankingDifficultyButtons[0].Select();
+
+        _databaseManager.GetDatas(true);
         //_databaseManager.GetDatas("easy");
     }
 
@@ -735,9 +963,98 @@ public class GameManager : MonoBehaviour
     public void GoSelectDifficulty()
     {
         //SelectDifficulty(3);
-        _screenManager.GoScreen("Difficulty");
+        _screenManager.GoScreen("Choice");
         _soundManager.PlayEffectSound("CardButton");
     }
+
+    public void ChoiceGame(int gameType)
+    {
+        /*
+         * 0: 무작위 카드 찾기
+         * 1: 순서대로 찾기
+        */
+        SelectMode((GAME_TYPE)gameType);
+
+        _screenManager.GoScreen("Difficulty");
+        _soundManager.PlayEffectSound("ButtonPopSound");
+    }
+
+
+    /* 랭킹 관련 함수 */
+    public void RandomRanking(bool isOn)
+    {
+        if (isOn)
+        {
+            _rankingGameType = GAME_TYPE.RANDOM;
+
+            _databaseManager.SetDatabase(_rankingGameType, _rankingDifficulty);
+            _databaseManager.GetDatas(true);
+        }
+    }
+
+    public void OrderRanking(bool isOn)
+    {
+        if (isOn)
+        {
+            _rankingGameType = GAME_TYPE.ORDER;
+
+            _databaseManager.SetDatabase(_rankingGameType, _rankingDifficulty);
+            _databaseManager.GetDatas(true);
+        }
+    }
+
+    public void EasyRanking(bool isOn)
+    {
+        if (isOn)
+        {
+            _rankingDifficulty = "easy";
+
+            _databaseManager.SetDatabase(_rankingGameType, _rankingDifficulty);
+            _databaseManager.GetDatas(true);
+        }
+    }
+
+    public void NormalRanking(bool isOn)
+    {
+        if (isOn)
+        {
+            _rankingDifficulty = "normal";
+
+            _databaseManager.SetDatabase(_rankingGameType, _rankingDifficulty);
+            _databaseManager.GetDatas(true);
+        }
+    }
+
+    public void HardRanking(bool isOn)
+    {
+        if (isOn)
+        {
+            _rankingDifficulty = "hard";
+
+            _databaseManager.SetDatabase(_rankingGameType, _rankingDifficulty);
+            _databaseManager.GetDatas(true);
+        }
+    }
+
+
+    //public void GameModeRanking(int gameType)
+    //{
+    //    /*
+    //     * 0: 무작위 카드 맞추기 모드
+    //     * 1: 순서대로 카드 맞추기 모드
+    //    */
+    //    _rankingGameType = (GAME_TYPE)gameType;
+    //    _databaseManager.SetDatabase(_rankingGameType, _rankingDifficulty);
+    //    _databaseManager.GetDatas(true);
+    //}
+
+    //public void GetRanking(string difficulty)
+    //{
+    //    _rankingDifficulty = difficulty;
+
+    //    _databaseManager.SetDatabase(_rankingGameType, _rankingDifficulty);
+    //    _databaseManager.GetDatas(true);
+    //}
 }
 
 /*
@@ -777,6 +1094,7 @@ public class GameManager : MonoBehaviour
  * 2023-03-27 21:36 -> 시작 화면 배경 변경
 
  * 2023-03-28 17:14 -> 버그 해결
+ * 2023-04-06 14:05 -> 순서대로 맞추기 모드 완성
 
  * 변경 내역
 
