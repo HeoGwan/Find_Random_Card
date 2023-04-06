@@ -78,3 +78,6 @@ crashlytics-build.properties
 **/*.bundle
 
 **/Library/
+
+**/Logs/
+**/UserSettings/Layouts/
