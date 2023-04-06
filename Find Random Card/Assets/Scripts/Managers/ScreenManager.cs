@@ -1,14 +1,19 @@
 using System.Collections;
 using System.Collections.Generic;
+using TMPro;
 using UnityEngine;
 
 public class ScreenManager : MonoBehaviour
 {
-    [SerializeField] private GameObject[] _screens;
+    [SerializeField] private GameObject[]       _screens;
 
-    private IDictionary<string, GameObject> _screenDic;
-    private Stack<string> _screenStack;
-    private string _bgmScreenName; // 배경음악 재생 관련 변수
+    [SerializeField] private TextMeshProUGUI    _difficultyTitle;
+
+    private IDictionary<string, GameObject>     _screenDic;
+    private Stack<string>                       _screenStack;
+    private string                              _bgmScreenName; // 배경음악 재생 관련 변수
+
+    private string[] _titles = { "무작위 카드 맞추기", "순서대로 카드 맞추기" };
 
     private void Start()
     {
@@ -77,6 +82,7 @@ public class ScreenManager : MonoBehaviour
         ShowScreen(true, _screenStack.Peek());
 
         if (screenName == "Setting") { GameManager._instance._settingManager.ShowSetting(); }
+        else if (screenName == "Difficulty") { _difficultyTitle.text = _titles[(int)GameManager._instance.GameType]; }
     }
 
     public void CoverScreen(string screenName)

@@ -8,7 +8,6 @@ using UnityEngine.UI;
 public class CardInfo
 {
     public int Number { get; set; }
-    public float PreviewTime { get; set; }
     public bool isCorrect { get; set; } = false;
 }
 
@@ -97,11 +96,11 @@ public class Card : MonoBehaviour
 
     public void SetCardInfo(CardInfo cardInfo, float flipCardSize)
     {
+        if (cardInfo != null) _cardInfo.Number = cardInfo.Number;
+
+        _showNumberText.text = _cardInfo.Number.ToString();
         _buttonImage.sprite = _cardFront;
-        _cardInfo.Number = cardInfo.Number;
-        _cardInfo.PreviewTime = cardInfo.PreviewTime;
         _cardInfo.isCorrect = false;
-        _showNumberText.text = cardInfo.Number.ToString();
         _flipAnim.transform.localScale = new Vector2(flipCardSize, flipCardSize);
 
         _button.onClick.AddListener(() =>

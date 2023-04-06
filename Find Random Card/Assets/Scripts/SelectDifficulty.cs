@@ -17,8 +17,12 @@ public class SelectDifficulty : MonoBehaviour
 
     [Space(20)]
     [Header("▼ Difficulty Info(Easy, Normal, Hard)")]
+    [Header("Find Random Card")]
     [TextArea]
-    [SerializeField] private string[] _infos;
+    [SerializeField] private string[] _randomInfos;
+    [Header("Find Order Card")]
+    [TextArea]
+    [SerializeField] private string[] _orderInfos;
 
     private float[]         _scrollPageValues;
     private float           _valueDistance = 0;
@@ -119,7 +123,7 @@ public class SelectDifficulty : MonoBehaviour
 
     void ShowDifficultyInfo()
     {
-        _showDifficultyInfo.text = _infos[_currentPage];
+        _showDifficultyInfo.text = GameManager._instance.GameType == GAME_TYPE.RANDOM ? _randomInfos[_currentPage] : _orderInfos[_currentPage];
     }
 
     // 난이도 선택 화살표 버튼
